@@ -25,11 +25,35 @@ public class BatchApplication {
 	public StepBuilderFactory stepBuilderFactory;
 
 	@Bean
+	public Step itemDelivered() {
+		return stepBuilderFactory.get("itemDelivered").tasklet(new Tasklet() {
+			@Override
+			public RepeatStatus execute(StepContribution stepContribution, ChunkContext chunkContext) throws Exception {
+				System.out.println("Item has been delivered to customer");
+				return RepeatStatus.FINISHED;
+			}
+		}).build();
+	}
+
+	@Bean
+	public Step driveToLocation() {
+		return stepBuilderFactory.get("driveToLocation").tasklet(new Tasklet() {
+			@Override
+			public RepeatStatus execute(StepContribution stepContribution, ChunkContext chunkContext) throws Exception {
+				System.out.println("Driver has arrived at location");
+				return RepeatStatus.FINISHED;
+			}
+		}).build();
+	}
+
+	@Bean
 	public Step packageItemStep() {
 		return stepBuilderFactory.get("packageItemStep").tasklet(new Tasklet() {
 			@Override
 			public RepeatStatus execute(StepContribution stepContribution, ChunkContext chunkContext) throws Exception {
-				System.out.println("Item has been packaged - at step process");
+				String item = chunkContext.getStepContext().getJobParameters().get("item").toString();
+				String date = chunkContext.getStepContext().getJobParameters().get("run.date").toString();
+				System.out.println(String.format("The item %s has been packaged at %s", item, date));
 				return RepeatStatus.FINISHED;
 			}
 		}).build();
@@ -37,7 +61,11 @@ public class BatchApplication {
 
 	@Bean
 	public Job deliverPackageJob() {
-		return jobBuilderFactory.get("deliverPackage").start(packageItemStep()).build();
+		return jobBuilderFactory.get("deliverPackage")
+				.start(packageItemStep())
+				.next(driveToLocation())
+				.next(itemDelivered())
+				.build();
 	}
 
 
