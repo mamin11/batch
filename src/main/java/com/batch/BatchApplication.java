@@ -1,9 +1,7 @@
 package com.batch;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.batch.core.Job;
-import org.springframework.batch.core.Step;
-import org.springframework.batch.core.StepContribution;
+import org.springframework.batch.core.*;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
@@ -32,6 +30,11 @@ public class BatchApplication {
 	@Bean
 	public JobExecutionDecider decider() {
 		return new DeliveryDecider();
+	}
+
+	@Bean
+	public StepExecutionListener selectFlowerListener() {
+		return new FlowersSelectionStepExecutionListener();
 	}
 
 	@Bean
@@ -105,6 +108,56 @@ public class BatchApplication {
 			}
 		}).build();
 	}
+
+	/* START OF FLOWERS JOB*/
+	//flower delivery job steps
+
+	@Bean
+	public Step selectFlowersStep() {
+		return stepBuilderFactory.get("selectFlowersStep").tasklet(new Tasklet() {
+			@Override
+			public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
+				System.out.println("Arranging flowers for delivery");
+				return RepeatStatus.FINISHED;
+			}
+		}).listener(selectFlowerListener()).build();
+	}
+
+	@Bean
+	public Step arrangeFlowersStep() {
+		return stepBuilderFactory.get("arrangeFlowersStep").tasklet(new Tasklet() {
+			@Override
+			public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
+				System.out.println("Arranging flowers ****");
+				return RepeatStatus.FINISHED;
+			}
+		}).build();
+	}
+
+	@Bean
+	public Step removeThornsStep() {
+		return stepBuilderFactory.get("removeThornsStep").tasklet(new Tasklet() {
+			@Override
+			public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
+				System.out.println("Removing thorns from flowers");
+				return RepeatStatus.FINISHED;
+			}
+		}).build();
+	}
+
+	@Bean
+	public Job prepareFlowers() {
+		return jobBuilderFactory.get("prepareFlowersJob")
+				.start(selectFlowersStep())
+					.on("TRIM_REQUIRED").to(removeThornsStep()).next(arrangeFlowersStep())
+				.from(selectFlowersStep())
+					.on("NO_TRIM_REQUIRED").to(arrangeFlowersStep())
+				.end()
+				.build();
+	}
+
+	/* END OF FLOWERS JOB*/
+
 
 	@Bean
 	public Job deliverPackageJob() throws ParseException {
