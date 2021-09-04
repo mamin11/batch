@@ -9,6 +9,8 @@ import org.springframework.batch.core.configuration.annotation.StepBuilderFactor
 import org.springframework.batch.core.job.flow.JobExecutionDecider;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.database.JdbcCursorItemReader;
+import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
@@ -18,6 +20,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.io.FileSystemResource;
 
+import javax.sql.DataSource;
 import java.util.List;
 
 
@@ -27,6 +30,7 @@ import java.util.List;
 public class BatchApplication {
 
 	public static String[] tokens = new String[] {"order_id", "first_name", "last_name", "email", "cost", "item_id", "item_name", "ship_date"};
+	public static String ORDER_SQL = "select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date from SHIPPED_ORDER order by order_id";
 
 	@Autowired
 	public JobBuilderFactory jobBuilderFactory;
@@ -34,23 +38,37 @@ public class BatchApplication {
 	@Autowired
 	public StepBuilderFactory stepBuilderFactory;
 
+	@Autowired
+	public DataSource dataSource;
+
+//	//reading data from csv
+//	@Bean
+//	public ItemReader<Order> itemReader() {
+//		FlatFileItemReader itemReader = new FlatFileItemReader<Order>();
+//		itemReader.setLinesToSkip(1);
+//		itemReader.setResource(new FileSystemResource("C:\\Users\\Abdim\\Desktop\\JAVA\\batch-application\\batch-application\\src\\main\\data\\shipped_orders.csv"));
+//
+//		DefaultLineMapper<Order> lineMapper = new DefaultLineMapper<Order>();
+//		DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
+//		tokenizer.setNames(tokens);
+//
+//		//set tokenizer on line mapper
+//		lineMapper.setLineTokenizer(tokenizer);
+//
+//		lineMapper.setFieldSetMapper(new OrderFieldSetMapper());
+//
+//		itemReader.setLineMapper(lineMapper);
+//		return itemReader;
+//	}
+
 	@Bean
 	public ItemReader<Order> itemReader() {
-		FlatFileItemReader itemReader = new FlatFileItemReader<Order>();
-		itemReader.setLinesToSkip(1);
-		itemReader.setResource(new FileSystemResource("C:\\Users\\Abdim\\Desktop\\JAVA\\batch-application\\batch-application\\src\\main\\data\\shipped_orders.csv"));
-
-		DefaultLineMapper<Order> lineMapper = new DefaultLineMapper<Order>();
-		DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
-		tokenizer.setNames(tokens);
-
-		//set tokenizer on line mapper
-		lineMapper.setLineTokenizer(tokenizer);
-
-		lineMapper.setFieldSetMapper(new OrderFieldSetMapper());
-
-		itemReader.setLineMapper(lineMapper);
-		return itemReader;
+		return new JdbcCursorItemReaderBuilder<Order>()
+				.dataSource(dataSource)
+				.name("jdbcCursorItemReader")
+				.sql(ORDER_SQL)
+				.rowMapper(new OrderRowMapper())
+				.build();
 	}
 
 	@Bean
