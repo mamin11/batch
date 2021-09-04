@@ -15,7 +15,10 @@ import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuild
 import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
 import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
 import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.FlatFileItemWriter;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
+import org.springframework.batch.item.file.transform.BeanWrapperFieldExtractor;
+import org.springframework.batch.item.file.transform.DelimitedLineAggregator;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
@@ -33,6 +36,7 @@ import java.util.List;
 public class BatchApplication {
 
 	public static String[] tokens = new String[] {"order_id", "first_name", "last_name", "email", "cost", "item_id", "item_name", "ship_date"};
+	public static String[] names = new String[] {"orderId", "firstName", "lastName", "email", "cost", "itemId", "itemName", "shipDate"};
 	public static String ORDER_SQL = "select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date from SHIPPED_ORDER order by order_id";
 
 	@Autowired
@@ -65,6 +69,22 @@ public class BatchApplication {
 //	}
 
 	@Bean
+	public ItemWriter<Order> itemWriter() {
+		FlatFileItemWriter<Order> itemWriter = new FlatFileItemWriter<Order>();
+		itemWriter.setResource(new FileSystemResource("C:\\Users\\Abdim\\Desktop\\JAVA\\batch-application\\batch-application\\src\\main\\data\\orders_from_writer.csv"));
+
+		DelimitedLineAggregator<Order> aggregator = new DelimitedLineAggregator<Order>();
+		aggregator.setDelimiter(",");
+
+		BeanWrapperFieldExtractor<Order> fieldExtractor = new BeanWrapperFieldExtractor<Order>();
+		fieldExtractor.setNames(names);
+		aggregator.setFieldExtractor(fieldExtractor);
+
+		itemWriter.setLineAggregator(aggregator);
+		return itemWriter;
+	}
+
+	@Bean
 	public PagingQueryProvider queryProvider() throws Exception {
 		SqlPagingQueryProviderFactoryBean factoryBean = new SqlPagingQueryProviderFactoryBean();
 		factoryBean.setSelectClause("select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date");
@@ -89,13 +109,7 @@ public class BatchApplication {
 		return this.stepBuilderFactory.get("chunkBasedStep")
 				.<Order, Order>chunk(3)
 				.reader(itemReader())
-				.writer(new ItemWriter<Order>() {
-					@Override
-					public void write(List<? extends Order> items) throws Exception {
-						System.out.println(String.format("ItemWriter received list of size: %s", items.size()));
-						items.forEach(System.out::println);
-					}
-				}).build();
+				.writer(itemWriter()).build();
 	}
 
 	@Bean
