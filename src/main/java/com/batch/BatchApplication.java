@@ -1,31 +1,32 @@
 package com.batch;
 
+import com.batch.models.Order;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.*;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
-import org.springframework.batch.core.job.builder.FlowBuilder;
-import org.springframework.batch.core.job.flow.Flow;
 import org.springframework.batch.core.job.flow.JobExecutionDecider;
-import org.springframework.batch.core.job.flow.support.SimpleFlow;
-import org.springframework.batch.core.scope.context.ChunkContext;
-import org.springframework.batch.core.step.tasklet.Tasklet;
-import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.mapping.DefaultLineMapper;
+import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
-import org.springframework.core.task.SimpleAsyncTaskExecutor;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.core.io.FileSystemResource;
 
-import java.text.ParseException;
+import java.util.List;
+
 
 @SpringBootApplication
 @EnableBatchProcessing
 @Slf4j
-@Transactional
 public class BatchApplication {
+
+	public static String[] tokens = new String[] {"order_id", "first_name", "last_name", "email", "cost", "item_id", "item_name", "ship_date"};
 
 	@Autowired
 	public JobBuilderFactory jobBuilderFactory;
@@ -34,187 +35,44 @@ public class BatchApplication {
 	public StepBuilderFactory stepBuilderFactory;
 
 	@Bean
-	public JobExecutionDecider decider() {
-		return new DeliveryDecider();
+	public ItemReader<Order> itemReader() {
+		FlatFileItemReader itemReader = new FlatFileItemReader<Order>();
+		itemReader.setLinesToSkip(1);
+		itemReader.setResource(new FileSystemResource("C:\\Users\\Abdim\\Desktop\\JAVA\\batch-application\\batch-application\\src\\main\\data\\shipped_orders.csv"));
+
+		DefaultLineMapper<Order> lineMapper = new DefaultLineMapper<Order>();
+		DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
+		tokenizer.setNames(tokens);
+
+		//set tokenizer on line mapper
+		lineMapper.setLineTokenizer(tokenizer);
+
+		lineMapper.setFieldSetMapper(new OrderFieldSetMapper());
+
+		itemReader.setLineMapper(lineMapper);
+		return itemReader;
 	}
 
 	@Bean
-	public StepExecutionListener selectFlowerListener() {
-		return new FlowersSelectionStepExecutionListener();
+	public Step chunkBasedStep() {
+		return this.stepBuilderFactory.get("chunkBasedStep")
+				.<Order, Order>chunk(3)
+				.reader(itemReader())
+				.writer(new ItemWriter<Order>() {
+					@Override
+					public void write(List<? extends Order> items) throws Exception {
+						System.out.println(String.format("ItemWriter received list of size: %s", items.size()));
+						items.forEach(System.out::println);
+					}
+				}).build();
 	}
 
 	@Bean
-	public Step nestedBillingJobStep() {
-		return stepBuilderFactory.get("nestedBillingStep").job(billingJob()).build();
-	}
-
-	@Bean
-	public Step sendInvoiceStep() {
-		return stepBuilderFactory.get("sendInvoiceStep").tasklet(new Tasklet() {
-			@Override
-			public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
-				System.out.println("Send invoice to customer step");
-				return RepeatStatus.FINISHED;
-			}
-		}).build();
-	}
-
-	@Bean
-	public Step itemDelivered() {
-		return stepBuilderFactory.get("itemDelivered").tasklet(new Tasklet() {
-			@Override
-			public RepeatStatus execute(StepContribution stepContribution, ChunkContext chunkContext) throws Exception {
-				System.out.println("Item has been delivered to customer");
-				return RepeatStatus.FINISHED;
-			}
-		}).build();
-	}
-
-	@Bean
-	public Step leavePackageAtDoor() {
-		return stepBuilderFactory.get("leavePackageAtDoor").tasklet(new Tasklet() {
-			@Override
-			public RepeatStatus execute(StepContribution stepContribution, ChunkContext chunkContext) throws Exception {
-				System.out.println("Leaving package at door for customer........");
-				return RepeatStatus.FINISHED;
-			}
-		}).build();
-	}
-
-	@Bean
-	public Step driverGotLost() {
-		return stepBuilderFactory.get("driverGotLost").tasklet(new Tasklet() {
-			@Override
-			public RepeatStatus execute(StepContribution stepContribution, ChunkContext chunkContext) throws Exception {
-				System.out.println("Driver got lost. Retrying again !!");
-				return RepeatStatus.FINISHED;
-			}
-		}).build();
-	}
-
-	@Bean
-	public Step deliverPackage() {
-		return stepBuilderFactory.get("deliverPackage").tasklet(new Tasklet() {
-			@Override
-			public RepeatStatus execute(StepContribution stepContribution, ChunkContext chunkContext) throws Exception {
-				System.out.println("Delivering item to customer");
-				return RepeatStatus.FINISHED;
-			}
-		}).build();
-	}
-
-	@Bean
-	public Step driveToLocation() {
-		boolean GOT_LOST = false;
-		return stepBuilderFactory.get("driveToLocation").tasklet(new Tasklet() {
-			@Override
-			public RepeatStatus execute(StepContribution stepContribution, ChunkContext chunkContext) throws Exception {
-				if (GOT_LOST) {
-					throw new RuntimeException("Driver got lost");
-				}
-				System.out.println("Driver has arrived at location");
-				return RepeatStatus.FINISHED;
-			}
-		}).build();
-	}
-
-	@Bean
-	public Step packageItemStep() {
-		return stepBuilderFactory.get("packageItemStep").tasklet(new Tasklet() {
-			@Override
-			public RepeatStatus execute(StepContribution stepContribution, ChunkContext chunkContext) throws Exception {
-//				String item = chunkContext.getStepContext().getJobParameters().get("item").toString();
-//				String date = chunkContext.getStepContext().getJobParameters().get("run.date").toString();
-				System.out.println(String.format("The item has been packaged ********** "));
-				return RepeatStatus.FINISHED;
-			}
-		}).build();
-	}
-
-	/* START OF FLOWERS JOB*/
-	//flower delivery job steps
-
-	@Bean
-	public Step selectFlowersStep() {
-		return stepBuilderFactory.get("selectFlowersStep").tasklet(new Tasklet() {
-			@Override
-			public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
-				System.out.println("Arranging flowers for delivery");
-				return RepeatStatus.FINISHED;
-			}
-		}).listener(selectFlowerListener()).build();
-	}
-
-	@Bean
-	public Step arrangeFlowersStep() {
-		return stepBuilderFactory.get("arrangeFlowersStep").tasklet(new Tasklet() {
-			@Override
-			public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
-				System.out.println("Arranging flowers ****");
-				return RepeatStatus.FINISHED;
-			}
-		}).build();
-	}
-
-	@Bean
-	public Step removeThornsStep() {
-		return stepBuilderFactory.get("removeThornsStep").tasklet(new Tasklet() {
-			@Override
-			public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
-				System.out.println("Removing thorns from flowers");
-				return RepeatStatus.FINISHED;
-			}
-		}).build();
-	}
-
-	@Bean
-	public Job prepareFlowers() {
-		return jobBuilderFactory.get("prepareFlowersJob")
-				.start(selectFlowersStep())
-					.on("TRIM_REQUIRED").to(removeThornsStep()).next(arrangeFlowersStep())
-				.from(selectFlowersStep())
-					.on("NO_TRIM_REQUIRED").to(arrangeFlowersStep())
-				.end()
+	public Job job () {
+		return this.jobBuilderFactory.get("job")
+				.start(chunkBasedStep())
 				.build();
 	}
-
-	/* END OF FLOWERS JOB*/
-
-	//delivery flow
-	@Bean
-	public Flow deliveryFlow() {
-		return new FlowBuilder<SimpleFlow>("deliveryFlow")
-				.start(driveToLocation())
-				.on("FAILED").to(driverGotLost())
-				.from(driveToLocation())
-				.on("*").to(decider())
-				.on("PRESENT").to(itemDelivered())
-				.from(decider())
-				.on("NOT_PRESENT").to(leavePackageAtDoor()).build();
-	}
-
-	//billing flow
-	@Bean
-	public Flow billingFlow() {
-		return new FlowBuilder<SimpleFlow>("billingFlow").start(sendInvoiceStep()).build();
-	}
-
-	@Bean
-	public Job deliverPackageJob() throws ParseException {
-		return jobBuilderFactory.get("deliverPackageJob")
-				.start(packageItemStep())
-				.split(new SimpleAsyncTaskExecutor())
-				.add(deliveryFlow(), billingFlow())
-				.end()
-				.build();
-	}
-
-	@Bean
-	public Job billingJob(){
-		return jobBuilderFactory.get("billingJob").start(sendInvoiceStep()).build();
-	}
-
-
 
 	public static void main(String[] args) {
 		SpringApplication.run(BatchApplication.class, args);
