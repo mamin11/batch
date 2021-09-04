@@ -7,6 +7,7 @@ import org.springframework.batch.core.configuration.annotation.EnableBatchProces
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.job.flow.JobExecutionDecider;
+import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
@@ -26,13 +27,17 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import javax.sql.DataSource;
+import java.util.Date;
 import java.util.List;
 
 
 @SpringBootApplication
 @EnableBatchProcessing
+@EnableScheduling
 @Slf4j
 public class BatchApplication {
 
@@ -49,7 +54,17 @@ public class BatchApplication {
 	public StepBuilderFactory stepBuilderFactory;
 
 	@Autowired
+	JobLauncher jobLauncher;
+
+	@Autowired
 	public DataSource dataSource;
+
+	@Scheduled(cron = "0/30 * * * * *")
+	public void runJob() throws Exception {
+		JobParametersBuilder parametersBuilder = new JobParametersBuilder();
+		parametersBuilder.addDate("runTime", new Date());
+		this.jobLauncher.run(job(), parametersBuilder.toJobParameters());
+	}
 
 //	//reading data from csv
 //	@Bean
