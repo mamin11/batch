@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.text.ParseException;
@@ -192,12 +193,18 @@ public class BatchApplication {
 				.on("NOT_PRESENT").to(leavePackageAtDoor()).build();
 	}
 
+	//billing flow
+	@Bean
+	public Flow billingFlow() {
+		return new FlowBuilder<SimpleFlow>("billingFlow").start(sendInvoiceStep()).build();
+	}
+
 	@Bean
 	public Job deliverPackageJob() throws ParseException {
 		return jobBuilderFactory.get("deliverPackageJob")
 				.start(packageItemStep())
-				.on("*").to(deliveryFlow())
-				.next(nestedBillingJobStep())
+				.split(new SimpleAsyncTaskExecutor())
+				.add(deliveryFlow(), billingFlow())
 				.end()
 				.build();
 	}
