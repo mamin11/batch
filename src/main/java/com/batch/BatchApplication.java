@@ -38,6 +38,22 @@ public class BatchApplication {
 	}
 
 	@Bean
+	public Step nestedBillingJobStep() {
+		return stepBuilderFactory.get("nestedBillingStep").job(billingJob()).build();
+	}
+
+	@Bean
+	public Step sendInvoiceStep() {
+		return stepBuilderFactory.get("sendInvoiceStep").tasklet(new Tasklet() {
+			@Override
+			public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
+				System.out.println("Send invoice to customer step");
+				return RepeatStatus.FINISHED;
+			}
+		}).build();
+	}
+
+	@Bean
 	public Step itemDelivered() {
 		return stepBuilderFactory.get("itemDelivered").tasklet(new Tasklet() {
 			@Override
@@ -170,8 +186,14 @@ public class BatchApplication {
 						.on("PRESENT").to(itemDelivered())
 					.from(decider())
 						.on("NOT_PRESENT").to(leavePackageAtDoor())
+				.next(nestedBillingJobStep())
 				.end()
 				.build();
+	}
+
+	@Bean
+	public Job billingJob(){
+		return jobBuilderFactory.get("billingJob").start(sendInvoiceStep()).build();
 	}
 
 
