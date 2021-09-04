@@ -10,7 +10,10 @@ import org.springframework.batch.core.job.flow.JobExecutionDecider;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
+import org.springframework.batch.item.database.PagingQueryProvider;
 import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
+import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
+import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
@@ -62,17 +65,27 @@ public class BatchApplication {
 //	}
 
 	@Bean
-	public ItemReader<Order> itemReader() {
-		return new JdbcCursorItemReaderBuilder<Order>()
+	public PagingQueryProvider queryProvider() throws Exception {
+		SqlPagingQueryProviderFactoryBean factoryBean = new SqlPagingQueryProviderFactoryBean();
+		factoryBean.setSelectClause("select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date");
+		factoryBean.setFromClause("from SHIPPED_ORDER");
+		factoryBean.setSortKey("order_id");
+		factoryBean.setDataSource(dataSource);
+		return factoryBean.getObject();
+	}
+
+	@Bean
+	public ItemReader<Order> itemReader() throws Exception {
+		return new JdbcPagingItemReaderBuilder<Order>()
 				.dataSource(dataSource)
 				.name("jdbcCursorItemReader")
-				.sql(ORDER_SQL)
+				.queryProvider(queryProvider())
 				.rowMapper(new OrderRowMapper())
 				.build();
 	}
 
 	@Bean
-	public Step chunkBasedStep() {
+	public Step chunkBasedStep() throws Exception {
 		return this.stepBuilderFactory.get("chunkBasedStep")
 				.<Order, Order>chunk(3)
 				.reader(itemReader())
@@ -86,7 +99,7 @@ public class BatchApplication {
 	}
 
 	@Bean
-	public Job job () {
+	public Job job () throws Exception {
 		return this.jobBuilderFactory.get("job")
 				.start(chunkBasedStep())
 				.build();
