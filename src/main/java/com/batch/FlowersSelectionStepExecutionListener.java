@@ -13,7 +13,8 @@ public class FlowersSelectionStepExecutionListener implements StepExecutionListe
     @Override
     public ExitStatus afterStep(StepExecution stepExecution) {
         System.out.println("Executing after step listener");
-        String flowerType = stepExecution.getJobParameters().getString("type");
+//        String flowerType = stepExecution.getJobParameters().getString("type");
+        String flowerType = "roses";
         return flowerType.equalsIgnoreCase("roses") ? new ExitStatus("TRIM_REQUIRED") : new ExitStatus("NO_TRIM_REQUIRED");
     }
 }

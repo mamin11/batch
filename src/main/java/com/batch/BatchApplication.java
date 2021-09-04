@@ -5,7 +5,10 @@ import org.springframework.batch.core.*;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.job.builder.FlowBuilder;
+import org.springframework.batch.core.job.flow.Flow;
 import org.springframework.batch.core.job.flow.JobExecutionDecider;
+import org.springframework.batch.core.job.flow.support.SimpleFlow;
 import org.springframework.batch.core.scope.context.ChunkContext;
 import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.repeat.RepeatStatus;
@@ -13,12 +16,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.text.ParseException;
 
 @SpringBootApplication
 @EnableBatchProcessing
 @Slf4j
+@Transactional
 public class BatchApplication {
 
 	@Autowired
@@ -174,18 +179,24 @@ public class BatchApplication {
 
 	/* END OF FLOWERS JOB*/
 
+	//delivery flow
+	@Bean
+	public Flow deliveryFlow() {
+		return new FlowBuilder<SimpleFlow>("deliveryFlow")
+				.start(driveToLocation())
+				.on("FAILED").to(driverGotLost())
+				.from(driveToLocation())
+				.on("*").to(decider())
+				.on("PRESENT").to(itemDelivered())
+				.from(decider())
+				.on("NOT_PRESENT").to(leavePackageAtDoor()).build();
+	}
 
 	@Bean
 	public Job deliverPackageJob() throws ParseException {
 		return jobBuilderFactory.get("deliverPackageJob")
 				.start(packageItemStep())
-				.next(driveToLocation())
-					.on("FAILED").to(driverGotLost())
-				.from(driveToLocation())
-					.on("*").to(decider())
-						.on("PRESENT").to(itemDelivered())
-					.from(decider())
-						.on("NOT_PRESENT").to(leavePackageAtDoor())
+				.on("*").to(deliveryFlow())
 				.next(nestedBillingJobStep())
 				.end()
 				.build();
